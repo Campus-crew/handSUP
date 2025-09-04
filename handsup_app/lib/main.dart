@@ -5,10 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
+import 'core/demo_mode.dart';   // <-- ДОБАВЬ
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await DemoMode.autoDetect(); 
   runApp(const SignTranslatorApp());
 }
 
@@ -45,10 +47,20 @@ class SignTranslatorApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: seed),
           useMaterial3: true,
           scaffoldBackgroundColor: const Color(0xFFF4F6FB),
+          // Изменение внешнего вида полей ввода
           inputDecorationTheme: const InputDecorationTheme(
-            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
-            filled: true,
-            fillColor: Colors.white,
+          filled: false,
+          fillColor: Colors.transparent,
+          border: UnderlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF3A587E)), // Линия синяя (#3A587E)
+          ),
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF3A587E)),
+          ),
+          focusedBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF3A587E), width: 2),
+          ),
+          hintStyle: TextStyle(color: Color(0xFF6284AF)),
           ),
           filledButtonTheme: FilledButtonThemeData(
             style: FilledButton.styleFrom(
@@ -182,17 +194,21 @@ class _AuthTextField extends StatelessWidget {
   const _AuthTextField({required this.hint, this.obscure = false});
   final String hint;
   final bool obscure;
+
   @override
   Widget build(BuildContext context) {
     return TextField(
       obscureText: obscure,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
-        hintText: hint,
+        hintText: hint, // ← placeholder внутри
         hintStyle: const TextStyle(color: Colors.white70),
-        filled: true,
-        fillColor: const Color(0xFF123469),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        enabledBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.white70), // серая линия
+        ),
+        focusedBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.white, width: 2), // белая линия при фокусе
+        ),
       ),
     );
   }
@@ -281,6 +297,14 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
     return Column(children: [
       const SizedBox(height: 4),
       const _TopBar(title: 'Translator'),
+      if (DemoMode.enabled)
+      const Padding(
+        padding: EdgeInsets.only(top: 6, bottom: 2),
+        child: Text(
+          'Demo mode: iOS Simulator (камера/микрофон недоступны)',
+          style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+        ),
+      ),
       const SizedBox(height: 8),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -332,28 +356,40 @@ class _SignToTextOrSoundPaneState extends State<SignToTextOrSoundPane> {
     _setupCamera();
   }
 
-  Future<void> _setupCamera() async {
-    setState(() => _error = null);
-    final statuses = await [Permission.camera, Permission.microphone].request();
-    if (statuses[Permission.camera] != PermissionStatus.granted) {
-      setState(() => _error = 'Camera permission denied');
+ Future<void> _setupCamera() async {
+  // 👇 Демо-режим: на iOS Simulator камеры нет
+  if (DemoMode.enabled) {
+    setState(() => _error = 'Camera is unavailable on iOS Simulator');
+    return;
+  }
+
+  setState(() => _error = null);
+
+  final statuses = await [Permission.camera, Permission.microphone].request();
+  if (statuses[Permission.camera] != PermissionStatus.granted) {
+    setState(() => _error = 'Camera permission denied');
+    return;
+  }
+
+  try {
+    final cams = await availableCameras();
+    if (cams.isEmpty) {
+      setState(() => _error = 'No cameras available');
       return;
     }
-    try {
-      final cams = await availableCameras();
-      if (cams.isEmpty) {
-        setState(() => _error = 'No cameras available');
-        return;
-      }
-      final controller = CameraController(cams.first, ResolutionPreset.medium, enableAudio: false);
-      setState(() {
-        _controller = controller;
-        _initFuture = controller.initialize();
-      });
-    } catch (e) {
-      setState(() => _error = 'Camera init failed: $e');
-    }
+    final controller = CameraController(
+      cams.first,
+      ResolutionPreset.medium,
+      enableAudio: false,
+    );
+    setState(() {
+      _controller = controller;
+      _initFuture = controller.initialize();
+    });
+  } catch (e) {
+    setState(() => _error = 'Camera init failed: $e');
   }
+}
 
   @override
   void dispose() {
@@ -362,29 +398,51 @@ class _SignToTextOrSoundPaneState extends State<SignToTextOrSoundPane> {
   }
 
   Future<void> _startProcessing() async {
-    if (_controller == null || !(_controller!.value.isInitialized)) return;
+  // 👇 Демо-режим: имитируем распознавание без камеры
+  if (DemoMode.enabled) {
     setState(() {
       _isRunning = true;
       _resultText = '';
     });
-
-    await _controller!.startImageStream((_) {});
-    await Future.delayed(const Duration(seconds: 2)); // mock processing
-    await _controller!.stopImageStream();
-
+    await Future.delayed(const Duration(seconds: 1));
     const mock = 'Hello';
     setState(() {
       _resultText = mock;
       _isRunning = false;
     });
-
     widget.history.add(HistoryItem(
       direction: Direction.signToText,
       input: '[sign]',
       output: mock,
       timestamp: DateTime.now(),
     ));
+    return;
   }
+
+  // 👉 ниже остаётся твой реальный код
+  if (_controller == null || !(_controller!.value.isInitialized)) return;
+  setState(() {
+    _isRunning = true;
+    _resultText = '';
+  });
+
+  await _controller!.startImageStream((_) {});
+  await Future.delayed(const Duration(seconds: 2)); // mock processing
+  await _controller!.stopImageStream();
+
+  const mock = 'Hello';
+  setState(() {
+    _resultText = mock;
+    _isRunning = false;
+  });
+
+  widget.history.add(HistoryItem(
+    direction: Direction.signToText,
+    input: '[sign]',
+    output: mock,
+    timestamp: DateTime.now(),
+  ));
+}
 
   Future<void> _speak() async {
     if (_resultText.isEmpty) return;
@@ -404,7 +462,10 @@ class _SignToTextOrSoundPaneState extends State<SignToTextOrSoundPane> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Column(children: [
-        AspectRatio(
+              // 1) Превью (камера / заглушка)
+      Flexible(
+        flex: 5,
+        child: AspectRatio(
           aspectRatio: 4 / 3,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
@@ -435,27 +496,38 @@ class _SignToTextOrSoundPaneState extends State<SignToTextOrSoundPane> {
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        _ResultCard(
+      ),
+
+      const SizedBox(height: 12),
+
+      // 2) Карточка «Text»
+      Flexible(
+        flex: 4,
+        child: _ResultCard(
           title: 'Text',
-          child: SizedBox(
-            height: 120,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
-              child: Text(_resultText.isEmpty ? '—' : _resultText,
-                  style: const TextStyle(fontSize: 16)),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              _resultText.isEmpty ? '—' : _resultText,
+              style: const TextStyle(fontSize: 16),
+              ),
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.volume_up_outlined),
+              onPressed: _resultText.isEmpty ? null : _speak,
             ),
           ),
-          trailing: IconButton(
-            icon: const Icon(Icons.volume_up_outlined),
-            onPressed: _resultText.isEmpty ? null : _speak,
-          ),
         ),
-        const Spacer(),
+
+        const SizedBox(height: 12),
+
+        // 3) Кнопка Start
         SizedBox(
           width: double.infinity,
           child: FilledButton(
-            onPressed: (_initFuture == null || _error != null || _isRunning) ? null : _startProcessing,
+            onPressed: (_initFuture == null || _error != null || _isRunning)
+                ? null
+                : _startProcessing,
             child: Text(_isRunning ? 'Processing…' : 'Start'),
           ),
         ),
