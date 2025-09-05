@@ -397,7 +397,8 @@ class _SignToTextOrSoundPaneState extends State<SignToTextOrSoundPane> {
     super.dispose();
   }
 
-  Future<void> _startProcessing() async {
+// ...existing code...
+Future<void> _startProcessing() async {
   // 👇 Демо-режим: имитируем распознавание без камеры
   if (DemoMode.enabled) {
     setState(() {
@@ -416,10 +417,12 @@ class _SignToTextOrSoundPaneState extends State<SignToTextOrSoundPane> {
       output: mock,
       timestamp: DateTime.now(),
     ));
+    // Сразу озвучиваем результат
+    await _speak();
     return;
   }
 
-  // 👉 ниже остаётся твой реальный код
+  // 👉 Реальный код (заглушка)
   if (_controller == null || !(_controller!.value.isInitialized)) return;
   setState(() {
     _isRunning = true;
@@ -442,7 +445,13 @@ class _SignToTextOrSoundPaneState extends State<SignToTextOrSoundPane> {
     output: mock,
     timestamp: DateTime.now(),
   ));
+
+  // Сразу озвучиваем результат
+  await _speak();
 }
+// ...existing code...
+
+
 
   Future<void> _speak() async {
     if (_resultText.isEmpty) return;
@@ -551,6 +560,7 @@ class TextOrSoundToSignPane extends StatefulWidget {
 class _TextOrSoundToSignPaneState extends State<TextOrSoundToSignPane> {
   final TextEditingController _text = TextEditingController();
   VideoPlayerController? _videoController;
+  bool _isListening = false;
 
   @override
   void dispose() {
@@ -558,6 +568,18 @@ class _TextOrSoundToSignPaneState extends State<TextOrSoundToSignPane> {
     _videoController?.dispose();
     super.dispose();
   }
+  Future<void> _listenVoice() async {
+    setState(() {
+      _isListening = true;
+      _text.text = '';
+    });
+    await Future.delayed(const Duration(seconds: 2)); // имитация ожидания
+    setState(() {
+      _text.text = 'Hello'; // заглушка
+      _isListening = false;
+    });
+    await _start();
+}
 
   Future<void> _start() async {
     final input = _text.text.trim();
@@ -595,9 +617,13 @@ class _TextOrSoundToSignPaneState extends State<TextOrSoundToSignPane> {
             child: TextField(
               controller: _text,
               maxLines: null,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Text',
-                suffixIcon: Icon(Icons.mic_off), // placeholder
+                suffixIcon: IconButton(
+                  icon: Icon(_isListening ? Icons.mic : Icons.mic_none),
+                  onPressed: _isListening ? null : _listenVoice,
+                  tooltip: 'Speak',
+                ),
               ),
             ),
           ),
