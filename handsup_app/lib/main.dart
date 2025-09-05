@@ -765,7 +765,7 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        const CircleAvatar(radius: 40, backgroundImage: AssetImage('assets/images/placeholder_sign.png')),
+        const CircleAvatar(radius: 40, backgroundImage: AssetImage('assets/images/avatar.png')),
         const SizedBox(height: 12),
         const TextField(decoration: InputDecoration(hintText: 'Name')),
         const SizedBox(height: 10),

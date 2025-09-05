@@ -93,6 +93,7 @@ dependencies:
   video_player: ^2.8.6
   device_info_plus: ^11.5.0
   speech_to_text: ^7.3.0
+  flutter_launcher_icons: ^0.14.4
 
 dev_dependencies:
   flutter_test:
@@ -104,3 +105,8 @@ flutter:
   assets:
     - assets/sign_videos/hello.mp4
     - assets/images/placeholder_sign.png
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/appp.png"
